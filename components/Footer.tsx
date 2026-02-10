@@ -45,6 +45,7 @@ export const Footer: React.FC = () => {
             <div className="flex flex-wrap gap-x-4 gap-y-1">
                 <p>사업자등록번호 : 119-81-54852</p>
                 <p>개인정보보호책임자 : 김진철</p>
+                <p>홈페이지 운영담당자 : 김서균</p>
             </div>
             <div className="flex justify-between items-center mt-4">
                 <p className="text-zinc-600">Copyright ⓒ 한국직업능력교육원 안산 All rights reserved.</p>
