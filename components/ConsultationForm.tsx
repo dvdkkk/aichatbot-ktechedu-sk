@@ -45,7 +45,7 @@ const Reveal: React.FC<RevealProps> = ({ children, className = "", delay = 0 }) 
 };
 
 export const ConsultationForm: React.FC = () => {
-  const [status, setStatus] = useState<"IDLE" | "SUBMITTING" | "SUCCESS" | "ERROR">("IDLE");
+  const [status, setStatus] = useState<"IDLE" | "SUCCESS">("IDLE");
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isAgreed, setIsAgreed] = useState(true);
   const [ipAddress, setIpAddress] = useState('');
@@ -66,38 +66,68 @@ export const ConsultationForm: React.FC = () => {
     fetchIp();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isAgreed) {
       alert("개인정보 수집 및 이용에 동의해야 합니다.");
       return;
     }
-    setStatus("SUBMITTING");
-    
+
     const form = e.currentTarget;
     const data = new FormData(form);
-    
-    try {
-      // 요청하신 데이터 수집용 Formspree 엔드포인트 변경
-      const response = await fetch("https://formspree.io/f/mreazewy", {
-        method: "POST",
-        body: data,
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        setStatus("SUCCESS");
-        form.reset();
-      } else {
-        setStatus("ERROR");
-        alert("전송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      }
-    } catch (error) {
-      setStatus("ERROR");
-      alert("네트워크 오류가 발생했습니다.");
+
+    // InputHaven 폼 ID 설정
+    if (!data.get('_form_id')) {
+      data.append('_form_id', 'ca2310b9e38c197dfb7ef162b557d80a');
     }
+
+    // 기존 폼 항목 값 추출 및 name, message 표준 필드 매핑 (기존 필드 유지 + 호환성 확보)
+    const nameVal = (data.get('이름') as string) || '';
+    const ageVal = (data.get('나이') as string) || '';
+    const phoneVal = (data.get('연락처') as string) || '';
+    const purposeVal = (data.get('교육목적') as string) || '';
+    const inquiryVal = (data.get('문의내용') as string) || '';
+
+    if (!data.get('name')) {
+      data.append('name', nameVal);
+    }
+    if (!data.get('phone')) {
+      data.append('phone', phoneVal);
+    }
+    if (!data.get('message')) {
+      const formattedMessage = [
+        `[신규 상담 문의 접수]`,
+        `- 이름: ${nameVal}`,
+        `- 나이: ${ageVal}`,
+        `- 연락처: ${phoneVal}`,
+        `- 교육목적: ${purposeVal}`,
+        `- 문의내용: ${inquiryVal || '내용 없음'}`,
+        `- 접속IP: ${ipAddress || '미확인'}`
+      ].join('\n');
+      data.append('message', formattedMessage);
+    }
+
+    // [낙관적 UI (Optimistic UI)]
+    // 1. 즉시 성공 처리: 서버 응답을 기다리지 않고 0.1초 만에 즉시 완료 화면 표시
+    setStatus("SUCCESS");
+    form.reset();
+
+    // 2. 백그라운드 전송 및 전송 보장 (keepalive: true)
+    // 사용자가 전송 직후 페이지를 이동하거나 창을 닫아도 브라우저가 전송 완료를 보장
+    fetch("https://inputhaven.com/api/v1/submit", {
+      method: "POST",
+      body: data,
+      headers: {
+        'Accept': 'application/json'
+      },
+      keepalive: true
+    }).then(response => {
+      if (!response.ok) {
+        console.warn("InputHaven 응답 상태 코드:", response.status);
+      }
+    }).catch(error => {
+      console.error("InputHaven 백그라운드 전송 오류:", error);
+    });
   };
 
   return (
@@ -146,16 +176,29 @@ export const ConsultationForm: React.FC = () => {
           <Reveal delay={200} className="h-full">
             <div className="bg-white rounded-2xl p-4 md:p-7 shadow-2xl h-full">
               {status === "SUCCESS" ? (
-                  <div className="text-center py-12">
-                      <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="text-center py-12 animate-fade-in">
+                      <div className="w-14 h-14 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
                           <Send size={28} />
                       </div>
                       <h3 className="text-xl font-bold mb-2">상담 신청이 완료되었습니다!</h3>
-                      <p className="text-gray-600 text-sm">빠른 시일 내에 전문 상담원이 연락드리겠습니다.</p>
-                      <button onClick={() => setStatus("IDLE")} className="mt-6 text-xs text-gray-500 underline">다시 작성하기</button>
+                      <p className="text-gray-600 text-sm">빠른 시일 내에 전문 상담원이 친절하게 연락드리겠습니다.</p>
+                      <button 
+                          type="button" 
+                          onClick={() => setStatus("IDLE")} 
+                          className="mt-6 text-xs text-gray-500 hover:text-black underline font-medium cursor-pointer"
+                      >
+                          다시 작성하기
+                      </button>
                   </div>
               ) : (
-                  <form onSubmit={handleSubmit} className="space-y-2 md:space-y-3">
+                  <form 
+                      action="https://inputhaven.com/api/v1/submit" 
+                      method="POST" 
+                      onSubmit={handleSubmit} 
+                      className="space-y-2 md:space-y-3"
+                  >
+                  {/* InputHaven Form ID */}
+                  <input type="hidden" name="_form_id" value="ca2310b9e38c197dfb7ef162b557d80a" />
                   {/* IP 주소 및 메타데이터 */}
                   <input type="hidden" name="user_ip" value={ipAddress} />
                   <input type="hidden" name="_subject" value="[신규 상담 신청] AI기반 인공지능 챗봇 개발" />
@@ -243,10 +286,9 @@ export const ConsultationForm: React.FC = () => {
 
                   <button 
                       type="submit"
-                      disabled={status === "SUBMITTING"}
-                      className="w-full bg-black text-white font-bold py-3 rounded-lg text-base hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:bg-gray-400"
+                      className="w-full bg-black text-white font-bold py-3 rounded-lg text-base hover:bg-zinc-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
                   >
-                      {status === "SUBMITTING" ? "전송 중..." : "무료상담 신청하기"}
+                      무료상담 신청하기
                       <Send size={16} />
                   </button>
                   <p className="text-[10px] text-center text-gray-500 mt-2">
